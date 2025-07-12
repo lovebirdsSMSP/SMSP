@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quick Chat</title>
+  <style>
+    /* Your existing styles unchanged */
+    body {
+      margin: 0;
+      font-family: 'Segoe UI','Helvetica Neue',Arial,sans-serif;
+      background: #eceef0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+      transition: background 0.3s;
+    }
+    body.night {
+      background: #18191a;
+    }
+    .chat-container {
+      width: 100%; max-width: 380px;
+      height: 600px;
+      background: #ffffff;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+      overflow: hidden;
+      position: relative;
+    }
+    body.night .chat-container {
+      background: #242526;
+      box-shadow: 0 2px 12px rgba(255,255,255,0.1);
+    }
+    .chat-header {
+      background: #0084ff;
+      color: white;
+      padding: 12px;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .chat-header .title {
+      font-size: 1rem;
+    }
+    .chat-header .header-buttons {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .chat-header button {
+      background: transparent;
+      border: none;
+      font-size: 1.2rem;
+      color: white;
+      cursor: pointer;
+    }
+    .chat-messages {
+      flex: 1;
+      padding: 12px;
+      overflow-y: auto;
+      background: #f0f2f5;
+    }
+    body.night .chat-messages {
+      background: #3a3b3c;
+    }
+    .message {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 14px;
+      max-width: 100%;
+    }
+    .message.you {
+      flex-direction: row-reverse;
+      text-align: right;
+    }
+    .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      margin: 0 8px;
+      object-fit: cover;
+      flex-shrink: 0;
+      position: relative;
+    }
+    /* Presence dot on avatar */
+    .avatar.presence-online::after {
+      content: '';
+      position: absolute;
+      bottom: 2px;
+      right: 2px;
+      width: 10px;
+      height: 10px;
+      background: #4caf50;
+      border: 2px solid white;
+      border-radius: 50%;
+      box-shadow: 0 0 4px #4caf50;
+    }
+    .message-content {
+      max-width: 70%;
+      display: flex;
+      flex-direction: column;
+    }
+    .sender {
+      font-size: 0.75rem;
+      color: #666;
+      margin-bottom: 2px;
+      user-select: text;
+    }
+    body.night .sender {
+      color: #aaa;
+    }
+    .bubble {
+      background: #0084ff;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 18px;
+      word-wrap: break-word;
+      white-space: pre-wrap;
+    }
+    .message.you .bubble {
+      background: #dcf8c6;
+      color: #050505;
+    }
+    body.night .bubble {
+      background: #4b4b4b;
+      color: #e4e6eb;
+    }
+    .info {
+      font-size: 0.7rem;
+      color: #555;
+      margin-top: 2px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+    }
+    body.night .info {
+      color: #aaa;
+    }
+    .info .actions {
+      display: none;
+      gap: 8px;
+      cursor: pointer;
+    }
+    .message-content:hover .actions {
+      display: inline-flex;
+    }
+    .info .actions button {
+      background: transparent;
+      border: none;
+      color: inherit;
+      font-size: 1rem;
+      cursor: pointer;
+      padding: 0 3px;
+      user-select: none;
+    }
+    .chat-input {
+      padding: 10px;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    body.night .chat-input {
+      background: #242526;
+    }
+    .chat-input input[type="text"] {
+      flex: 1;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 18px;
+      background: #f0f2f5;
+      outline: none;
+      font-size: 1rem;
+      color: #000;
+    }
+    body.night .chat-input input[type="text"] {
+      background: #3a3b3c;
+      color: #e4e6eb;
+    }
+    .chat-input button {
+      background: #0084ff;
+      border: none;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 18px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    body.night .chat-input button {
+      background: #1877f2;
+    }
+    .emoji-picker {
+      position: absolute;
+      bottom: 60px;
+      right: 60px;
+      background: #ffffff;
+      border-radius: 8px;
+      padding: 8px;
+      display: none;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+      flex-wrap: wrap;
+      gap: 6px;
+      z-index: 10;
+    }
+    body.night .emoji-picker {
+      background: #3a3b3c;
+    }
+    .emoji-picker span {
+      font-size: 1.2rem;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 4px;
+      user-select: none;
+    }
+    .emoji-picker span:hover {
+      background: #0084ff;
+      color: white;
+    }
+    /* Modal for changing username/gender + avatar */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+    }
+    .modal {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      max-width: 320px;
+      width: 90%;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+      color: black;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    body.night .modal {
+      background: #3a3b3c;
+      color: #e4e6eb;
+    }
+    .modal h2 {
+      margin-top: 0;
+      margin-bottom: 0;
+      font-weight: 600;
+      text-align: center;
+    }
+    .modal label {
+      display: block;
+      user-select: none;
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+    .modal input[type="text"] {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      font-size: 1rem;
+      color: #000;
+    }
+    body.night .modal input[type="text"] {
+      background: #555;
+      border: 1px solid #777;
+      color: #e4e6eb;
+    }
+    .gender-options {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 12px;
+    }
+    .gender-options label {
+      cursor: pointer;
+      user-select: none;
+    }
+    .modal button {
+      background: #0084ff;
+      border: none;
+      color: white;
+      padding: 10px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1rem;
+      user-select: none;
+      width: 100%;
+    }
+    body.night .modal button {
+      background: #1877f2;
+    }
+    /* Avatar upload preview */
+    #avatarPreview {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      object-fit: cover;
+      margin: 0 auto 12px auto;
+      border: 2px solid #0084ff;
+      cursor: pointer;
+      display: block;
+    }
+    /* Typing indicator */
+    #typingIndicator {
+      font-size: 0.8rem;
+      color: #666;
+      padding: 0 12px 6px 12px;
+      min-height: 20px;
+      user-select: none;
+    }
+    body.night #typingIndicator {
+      color: #aaa;
+    }
+  </style>
+</head>
+<body>
+  <div class="chat-container" role="main" aria-label="Chat Application">
+    <div class="chat-header">
+      <div class="title">Quick Chat</div>
+      <div class="header-buttons">
+        <button id="changeUserBtn" title="Change Username/Gender/Avatar" aria-label="Change profile">👤</button>
+        <button id="nightModeBtn" title="Toggle Night Mode" aria-label="Toggle Night Mode">🌙</button>
+      </div>
+    </div>
+    <div class="chat-messages" id="messages" role="log" aria-live="polite" aria-relevant="additions"></div>
+    <div id="typingIndicator" aria-live="assertive" aria-atomic="true"></div>
+    <div class="chat-input">
+      <input id="text" type="text" placeholder="Type a message…" autocomplete="off" aria-label="Message input" />
+      <button id="emojiBtn" title="Emoji picker" aria-label="Toggle emoji picker">😊</button>
+      <input type="file" id="fileInput" accept="image/*,.pdf,.doc,.docx,.txt" style="display:none" aria-label="Attach file input" />
+      <button id="fileBtn" title="Attach file" aria-label="Attach file">📎</button>
+      <button id="sendBtn" title="Send message" aria-label="Send message">➤</button>
+    </div>
+    <div class="emoji-picker" id="emojiPicker" role="listbox" aria-label="Emoji picker"></div>
+  </div>
+
+  <!-- Modal for username + gender + avatar -->
+  <div class="modal-overlay" id="modalOverlay" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal">
+      <h2 id="modalTitle">Set Your Profile</h2>
+      
+      <img id="avatarPreview" src="" alt="Your avatar preview, click to change" tabindex="0" />
+      <input type="file" id="avatarInput" accept="image/*" style="display:none" aria-label="Upload avatar" />
+      
+      <label for="usernameInput">Name:</label>
+      <input type="text" id="usernameInput" maxlength="30" placeholder="Enter your name" autocomplete="name" />
+      
+      <label>Gender:</label>
+      <div class="gender-options">
+        <label><input type="radio" name="gender" value="male" checked /> Male</label>
+        <label><input type="radio" name="gender" value="female" disabled /> Female</label>
+      </div>
+      
+      <button id="saveProfileBtn">Save</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+    import {
+      getDatabase, ref, push, onChildAdded, get, child, set,
+      onChildRemoved, onChildChanged, remove, onValue, onDisconnect
+    } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
+
+    // Your Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyByuTV8XdB8kJK7c-G7BKaVrHhB7iAvKow",
+      authDomain: "smsp-chat.firebaseapp.com",
+      databaseURL: "https://smsp-chat-default-rtdb.firebaseio.com",
+      projectId: "smsp-chat",
+      storageBucket: "smsp-chat.appspot.com",
+      messagingSenderId: "796898972201",
+      appId: "1:796898972201:web:a828d703dd2f1b7b3bc238",
+      measurementId: "G-Z7HDEYMLK5"
+    };
+
+    // Initialize Firebase app & database
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // Chat room ID (fixed)
+    const roomId = "defaultRoom";
+
+    // Database refs
+    const messagesRef = ref(db, `rooms/${roomId}/messages`);
+    const typingRef = ref(db, `rooms/${roomId}/typing`);
+    const presenceRef = ref(db, `rooms/${roomId}/presence`);
+    const avatarsRef = ref(db, `rooms/${roomId}/assignedAvatars`);
+
+    // DOM elements
+    const textInput = document.getElementById("text");
+    const sendBtn = document.getElementById("sendBtn");
+    const fileInput = document.getElementById("fileInput");
+    const fileBtn = document.getElementById("fileBtn");
+    const emojiBtn = document.getElementById("emojiBtn");
+    const emojiPicker = document.getElementById("emojiPicker");
+    const messagesDiv = document.getElementById("messages");
+    const nightModeBtn = document.getElementById("nightModeBtn");
+    const changeUserBtn = document.getElementById("changeUserBtn");
+    const typingIndicator = document.getElementById("typingIndicator");
+
+    const modalOverlay = document.getElementById("modalOverlay");
+    const usernameInput = document.getElementById("usernameInput");
+    const saveProfileBtn = document.getElementById("saveProfileBtn");
+
+    const avatarPreview = document.getElementById("avatarPreview");
+    const avatarInput = document.getElementById("avatarInput");
+
+    // Random fallback avatars (male only)
+    const fallbackAvatars = [
+      "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-4.0.3&auto=format&fit=crop&w=64&h=64&q=80",
+      "https://images.unsplash.com/photo-1544005313-94ddf0286df2?ixlib=rb-4.0.3&auto=format&fit=crop&w=64&h=64&q=80",
+      "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?ixlib=rb-4.0.3&auto=format&fit=crop&w=64&h=64&q=80",
+      "https://images.unsplash.com/photo-1511367461989-f85a21fda167?ixlib=rb-4.0.3&auto=format&fit=crop&w=64&h=64&q=80",
+      "https://images.unsplash.com/photo-1547425260-76bcadfb4f2c?ixlib=rb-4.0.3&auto=format&fit=crop&w=64&h=64&q=80",
+    ];
+
+    // Helpers: hash + seeded shuffle
+    function hashString(str) {
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        hash = (hash << 5) - hash + str.charCodeAt(i);
+        hash |= 0;
+      }
+      return Math.abs(hash);
+    }
+    function mulberry32(a) {
+      return function() {
+        var t = a += 0x6D2B79F5;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      }
+    }
+    function shuffleArrayWithSeed(array, seed) {
+      let random = mulberry32(seed);
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+
+    // User data keys in sessionStorage
+    const STORAGE_KEYS = {
+      USERNAME: "quickchat_username",
+      GENDER: "quickchat_gender",
+      AVATAR: "quickchat_avatar" // store Base64 or URL
+    };
+
+    // User state
+    let userId = null; // unique per browser session
+    let username = "";
+    let gender = "male";
+    let avatar = "";
+
+    // For typing indicator timeout
+    let typingTimeout = null;
+
+    // --- UTILITIES ---
+    // Save profile to sessionStorage
+    function saveProfileToStorage() {
+      sessionStorage.setItem(STORAGE_KEYS.USERNAME, username);
+      sessionStorage.setItem(STORAGE_KEYS.GENDER, gender);
+      sessionStorage.setItem(STORAGE_KEYS.AVATAR, avatar);
+    }
+    // Load profile from sessionStorage
+    function loadProfileFromStorage() {
+      username = sessionStorage.getItem(STORAGE_KEYS.USERNAME) || "";
+      gender = sessionStorage.getItem(STORAGE_KEYS.GENDER) || "male";
+      avatar = sessionStorage.getItem(STORAGE_KEYS.AVATAR) || "";
+    }
+    // Generate unique user ID per browser session
+    function generateUserId() {
+      // Use random string + timestamp
+      return "user_" + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+    }
+
+    // Load avatar preview image
+    function updateAvatarPreview() {
+      if (avatar) {
+        avatarPreview.src = avatar;
+      } else {
+        // Use a fallback avatar from list based on username hash
+        if (username) {
+          const seed = hashString(username);
+          const shuffled = shuffleArrayWithSeed([...fallbackAvatars], seed);
+          avatarPreview.src = shuffled[0];
+        } else {
+          avatarPreview.src = fallbackAvatars[0];
+        }
+      }
+    }
+
+    // Show modal to edit profile
+    function openProfileModal() {
+      usernameInput.value = username;
+      // Set gender radio
+      [...document.querySelectorAll('input[name="gender"]')].forEach(input => {
+        input.checked = (input.value === gender);
+      });
+      updateAvatarPreview();
+      modalOverlay.style.display = "flex";
+      usernameInput.focus();
+    }
+    // Close profile modal
+    function closeProfileModal() {
+      modalOverlay.style.display = "none";
+    }
+
+    // Validate profile inputs (basic)
+    function validateProfile() {
+      return username.trim().length >= 2;
+    }
+
+    // Convert file to base64
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.onerror = e => reject(e);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // --- PRESENCE MANAGEMENT ---
+
+    // We'll keep track of connected users here
+    let connectedUsers = new Map(); // userId -> {username, gender, avatar, lastSeen}
+
+    // Add self presence in DB with TTL, remove on disconnect
+    async function setupPresence() {
+      userId = generateUserId();
+
+      const userPresenceRef = ref(db, `rooms/${roomId}/presence/${userId}`);
+
+      // Listen for presence of others
+      onValue(presenceRef, (snapshot) => {
+        const data = snapshot.val() || {};
+        connectedUsers.clear();
+        Object.entries(data).forEach(([id, info]) => {
+          connectedUsers.set(id, info);
+        });
+
+        // Update presence avatars on UI if needed
+
+        // Restrict users to 2 max
+        if (connectedUsers.size > 2) {
+          // If we are extra, kick self out
+          if (!connectedUsers.has(userId)) return;
+          alert("Chat room is full (2 users max). Please try again later.");
+          // Optionally disable input and send button
+          textInput.disabled = true;
+          sendBtn.disabled = true;
+          fileBtn.disabled = true;
+          emojiBtn.disabled = true;
+          return;
+        } else {
+          // Enable input if was disabled
+          textInput.disabled = false;
+          sendBtn.disabled = false;
+          fileBtn.disabled = false;
+          emojiBtn.disabled = false;
+        }
+      });
+
+      // Add self presence with metadata and a lastSeen timestamp to keep alive
+      async function updatePresence() {
+        const presenceData = {
+          username,
+          gender,
+          avatar,
+          lastSeen: Date.now()
+        };
+        await set(userPresenceRef, presenceData);
+      }
+
+      await updatePresence();
+
+      // Update presence every 15 seconds
+      setInterval(() => {
+        updatePresence();
+      }, 15000);
+
+      // Remove presence on disconnect
+      onDisconnect(userPresenceRef).remove();
+    }
+
+    // --- MESSAGE SENDING & RECEIVING ---
+
+    // Sanitize text (basic)
+    function escapeHTML(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Add message bubble to DOM
+    function addMessageToDOM(msg) {
+      if (!msg) return;
+      const {
+        id, username: senderName, gender: senderGender, text, timestamp, userId: senderId, avatar: senderAvatar, file, edited
+      } = msg;
+
+      const isYou = senderId === userId;
+
+      const messageDiv = document.createElement("div");
+      messageDiv.classList.add("message");
+      if (isYou) messageDiv.classList.add("you");
+
+      // Avatar image
+      const avatarImg = document.createElement("img");
+      avatarImg.classList.add("avatar");
+      avatarImg.src = senderAvatar || getFallbackAvatar(senderName);
+      avatarImg.alt = senderName + " avatar";
+      avatarImg.setAttribute("aria-hidden", "true");
+      if (connectedUsers.has(senderId)) {
+        avatarImg.classList.add("presence-online");
+      }
+
+      // Message content container
+      const contentDiv = document.createElement("div");
+      contentDiv.classList.add("message-content");
+
+      // Sender name label
+      const senderLabel = document.createElement("div");
+      senderLabel.classList.add("sender");
+      senderLabel.textContent = senderName;
+
+      // Bubble
+      const bubble = document.createElement("div");
+      bubble.classList.add("bubble");
+      bubble.innerHTML = "";
+
+      // If message contains a file
+      if (file) {
+        if (file.type.startsWith("image/")) {
+          const img = document.createElement("img");
+          img.src = file.url;
+          img.alt = file.name || "Image";
+          img.style.maxWidth = "200px";
+          img.style.borderRadius = "12px";
+          bubble.appendChild(img);
+          if (text) {
+            const textDiv = document.createElement("div");
+            textDiv.textContent = text;
+            bubble.appendChild(textDiv);
+          }
+        } else {
+          const link = document.createElement("a");
+          link.href = file.url;
+          link.target = "_blank";
+          link.rel = "noopener";
+          link.textContent = file.name || "Download file";
+          bubble.appendChild(link);
+          if (text) {
+            const textDiv = document.createElement("div");
+            textDiv.textContent = text;
+            bubble.appendChild(textDiv);
+          }
+        }
+      } else {
+        // Just text
+        bubble.textContent = text;
+      }
+
+      // Edited label
+      if (edited) {
+        const editedSpan = document.createElement("span");
+        editedSpan.style.fontSize = "0.7rem";
+        editedSpan.style.opacity = "0.7";
+        editedSpan.textContent = " (edited)";
+        bubble.appendChild(editedSpan);
+      }
+
+      // Info row: timestamp + actions (edit/delete)
+      const infoDiv = document.createElement("div");
+      infoDiv.classList.add("info");
+
+      const timeSpan = document.createElement("span");
+      timeSpan.textContent = new Date(timestamp).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+      infoDiv.appendChild(timeSpan);
+
+      // Actions only for your own messages
+      if (isYou) {
+        const actionsSpan = document.createElement("span");
+        actionsSpan.classList.add("actions");
+
+        // Edit button
+        const editBtn = document.createElement("button");
+        editBtn.title = "Edit message";
+        editBtn.textContent = "✏️";
+        editBtn.addEventListener("click", () => startEditingMessage(id, text));
+        actionsSpan.appendChild(editBtn);
+
+        // Delete button
+        const deleteBtn = document.createElement("button");
+        deleteBtn.title = "Delete message";
+        deleteBtn.textContent = "🗑️";
+        deleteBtn.addEventListener("click", () => deleteMessage(id));
+        actionsSpan.appendChild(deleteBtn);
+
+        infoDiv.appendChild(actionsSpan);
+      }
+
+      contentDiv.appendChild(senderLabel);
+      contentDiv.appendChild(bubble);
+      contentDiv.appendChild(infoDiv);
+
+      messageDiv.appendChild(avatarImg);
+      messageDiv.appendChild(contentDiv);
+
+      messagesDiv.appendChild(messageDiv);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    // Get fallback avatar by hashing username
+    function getFallbackAvatar(name) {
+      if (!name) return fallbackAvatars[0];
+      const seed = hashString(name);
+      const shuffled = shuffleArrayWithSeed([...fallbackAvatars], seed);
+      return shuffled[0];
+    }
+
+    // --- MESSAGE CRUD ---
+
+    // Send a new message
+    async function sendMessage(text, file = null) {
+      if (!text.trim() && !file) return;
+
+      // Prepare message object
+      const msgObj = {
+        userId,
+        username,
+        gender,
+        avatar,
+        text: text.trim(),
+        timestamp: Date.now(),
+        edited: false
+      };
+      if (file) {
+        msgObj.file = file;
+      }
+
+      // Push to database
+      await push(messagesRef, msgObj);
+      textInput.value = "";
+      typingRef.child(userId).remove(); // clear typing status
+    }
+
+    // Edit message (set new text)
+    async function editMessage(id, newText) {
+      if (!id) return;
+      const msgRef = ref(db, `rooms/${roomId}/messages/${id}`);
+      await set(msgRef, {
+        ...messagesCache[id],
+        text: newText.trim(),
+        edited: true
+      });
+      editingMessageId = null;
+      textInput.value = "";
+    }
+
+    // Delete message
+    async function deleteMessage(id) {
+      if (!id) return;
+      const msgRef = ref(db, `rooms/${roomId}/messages/${id}`);
+      await remove(msgRef);
+    }
+
+    // --- TYPING INDICATOR ---
+
+    function updateTypingStatus(isTyping) {
+      if (isTyping) {
+        set(ref(db, `rooms/${roomId}/typing/${userId}`), username);
+        resetTypingTimeout();
+      } else {
+        remove(ref(db, `rooms/${roomId}/typing/${userId}`));
+      }
+    }
+
+    function resetTypingTimeout() {
+      if (typingTimeout) clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(() => {
+        remove(ref(db, `rooms/${roomId}/typing/${userId}`));
+      }, 3000);
+    }
+
+    // --- EMOJI PICKER ---
+
+    const emojis = [
+      "😀","😁","😂","🤣","😃","😄","😅","😆","😉","😊","😋","😎","😍",
+      "😘","😗","😙","😚","🙂","🤗","🤩","🤔","😐","😑","😶","🙄","😏",
+      "😣","😥","😮","🤐","😯","😪","😫","😴","😌","😛","😜","😝","🤤",
+      "😒","😓","😔","😕","🙃","🤑","😲","☹️","🙁","😖","😞","😟","😤",
+      "😢","😭","😦","😧","😨","😩","🤯","😬","😰","😱","🥵","🥶","😳",
+      "🤪","😵","😡","😠","🤬","😷","🤒","🤕","🤢","🤮","🤧","😇","🤠",
+      "🤡","🤥","🤫","🤭","🧐","🤓","😈","👿","👹","👺","💀","👻","👽",
+      "🤖","💩","😺","😸","😹","😻","😼","😽","🙀","😿","😾"
+    ];
+
+    // Populate emoji picker
+    function setupEmojiPicker() {
+      emojis.forEach(e => {
+        const span = document.createElement("span");
+        span.textContent = e;
+        span.setAttribute("role", "option");
+        span.addEventListener("click", () => {
+          insertAtCursor(textInput, e);
+          emojiPicker.style.display = "none";
+          textInput.focus();
+          updateTypingStatus(true);
+        });
+        emojiPicker.appendChild(span);
+      });
+    }
+
+    function insertAtCursor(input, text) {
+      const start = input.selectionStart;
+      const end = input.selectionEnd;
+      const value = input.value;
+      input.value = value.substring(0, start) + text + value.substring(end);
+      input.selectionStart = input.selectionEnd = start + text.length;
+    }
+
+    // --- MESSAGE EDITING ---
+
+    let editingMessageId = null;
+
+    function startEditingMessage(id, currentText) {
+      editingMessageId = id;
+      textInput.value = currentText;
+      textInput.focus();
+    }
+
+    // --- LOAD & LISTEN MESSAGES ---
+
+    // Cache messages locally (id -> message)
+    const messagesCache = {};
+
+    // Listen for new/changed/deleted messages
+    onChildAdded(messagesRef, (data) => {
+      const id = data.key;
+      const msg = data.val();
+      messagesCache[id] = {...msg, id};
+      addMessageToDOM(messagesCache[id]);
+    });
+    onChildChanged(messagesRef, (data) => {
+      const id = data.key;
+      const msg = data.val();
+      messagesCache[id] = {...msg, id};
+      // Re-render entire messagesDiv for simplicity
+      renderMessages();
+    });
+    onChildRemoved(messagesRef, (data) => {
+      const id = data.key;
+      delete messagesCache[id];
+      renderMessages();
+    });
+
+    // Render all messages
+    function renderMessages() {
+      messagesDiv.innerHTML = "";
+      Object.values(messagesCache)
+        .sort((a,b) => a.timestamp - b.timestamp)
+        .forEach(addMessageToDOM);
+    }
+
+    // --- FILE UPLOAD ---
+
+    fileBtn.addEventListener("click", () => {
+      fileInput.click();
+    });
+
+    fileInput.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      // Read file as base64 for demo (small files only)
+      if (file.size > 5*1024*1024) {
+        alert("File size must be less than 5MB.");
+        return;
+      }
+
+      const base64 = await fileToBase64(file);
+
+      // Save message with file info
+      await sendMessage("", {
+        url: base64,
+        name: file.name,
+        type: file.type
+      });
+      fileInput.value = "";
+    });
+
+    // --- SEND BUTTON & ENTER KEY ---
+
+    sendBtn.addEventListener("click", () => {
+      if (editingMessageId) {
+        editMessage(editingMessageId, textInput.value);
+      } else {
+        sendMessage(textInput.value);
+      }
+    });
+
+    textInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        if (editingMessageId) {
+          editMessage(editingMessageId, textInput.value);
+        } else {
+          sendMessage(textInput.value);
+        }
+      }
+      updateTypingStatus(true);
+    });
+
+    textInput.addEventListener("input", () => {
+      updateTypingStatus(true);
+    });
+
+    // --- EMOJI BUTTON ---
+
+    emojiBtn.addEventListener("click", () => {
+      emojiPicker.style.display = emojiPicker.style.display === "flex" ? "none" : "flex";
+    });
+
+    // --- TYPING INDICATOR LISTENER ---
+
+    onValue(typingRef, (snapshot) => {
+      const typingUsers = snapshot.val() || {};
+      // Remove self
+      delete typingUsers[userId];
+      const names = Object.values(typingUsers);
+      if (names.length === 1) {
+        typingIndicator.textContent = `${names[0]} is typing…`;
+      } else if (names.length > 1) {
+        typingIndicator.textContent = "Multiple users are typing…";
+      } else {
+        typingIndicator.textContent = "";
+      }
+    });
+
+    // --- NIGHT MODE TOGGLE ---
+
+    nightModeBtn.addEventListener("click", () => {
+      document.body.classList.toggle("night");
+    });
+
+    // --- PROFILE MODAL ---
+
+    changeUserBtn.addEventListener("click", openProfileModal);
+    modalOverlay.addEventListener("click", (e) => {
+      if (e.target === modalOverlay) closeProfileModal();
+    });
+    saveProfileBtn.addEventListener("click", () => {
+      const newName = usernameInput.value.trim();
+      if (newName.length < 2) {
+        alert("Name must be at least 2 characters.");
+        usernameInput.focus();
+        return;
+      }
+      username = newName;
+      gender = document.querySelector('input[name="gender"]:checked').value;
+      // avatar already updated on upload or preview click
+      saveProfileToStorage();
+      closeProfileModal();
+      setupPresence(); // Update presence with new profile info
+    });
+
+    // --- AVATAR UPLOAD ---
+
+    avatarPreview.addEventListener("click", () => avatarInput.click());
+    avatarPreview.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        avatarInput.click();
+      }
+    });
+    avatarInput.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (!file.type.startsWith("image/")) {
+        alert("Please upload an image file.");
+        return;
+      }
+      if (file.size > 2*1024*1024) {
+        alert("Avatar image size must be less than 2MB.");
+        return;
+      }
+      try {
+        const base64 = await fileToBase64(file);
+        avatar = base64;
+        updateAvatarPreview();
+      } catch (err) {
+        alert("Failed to load image.");
+      }
+    });
+
+    // --- ON PAGE LOAD ---
+
+    // Load user profile from sessionStorage or open modal
+    loadProfileFromStorage();
+    if (!username) {
+      openProfileModal();
+    } else {
+      updateAvatarPreview();
+    }
+
+    // Setup emoji picker
+    setupEmojiPicker();
+
+    // Setup presence and Firebase listeners after profile ready
+    setupPresence();
+
+  </script>
+</body>
+</html>
