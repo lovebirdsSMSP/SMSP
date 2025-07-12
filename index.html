@@ -354,8 +354,8 @@
       
       <label>Gender:</label>
       <div class="gender-options">
-        <label><input type="radio" name="gender" value="male" checked /> Male</label>
-        <label><input type="radio" name="gender" value="female" disabled /> Female</label>
+        <label><input type="radio" name="gender" value="male" /> Male</label>
+        <label><input type="radio" name="gender" value="female" /> Female</label>
       </div>
       
       <button id="saveProfileBtn">Save</button>
@@ -480,503 +480,49 @@
     // Generate unique user ID per browser session
     function generateUserId() {
       // Use random string + timestamp
-      return "user_" + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+      return "user_" + Math.random().toString(36).substring(2, 10) + "_" + Date.now();
     }
 
-    // Load avatar preview image
-    function updateAvatarPreview() {
-      if (avatar) {
+    // Assign fallback avatar based on username hash
+    function getFallbackAvatar(name) {
+      const seed = hashString(name);
+      const shuffled = shuffleArrayWithSeed(fallbackAvatars.slice(), seed);
+      return shuffled[0];
+    }
+
+    // Show modal to enter profile if not set or change profile
+    function showProfileModal() {
+      usernameInput.value = username || "";
+      // Set gender radio checked according to saved gender, default male
+      const radios = modalOverlay.querySelectorAll('input[name="gender"]');
+      radios.forEach(r => r.checked = (r.value === gender));
+      if(avatar){
         avatarPreview.src = avatar;
       } else {
-        // Use a fallback avatar from list based on username hash
-        if (username) {
-          const seed = hashString(username);
-          const shuffled = shuffleArrayWithSeed([...fallbackAvatars], seed);
-          avatarPreview.src = shuffled[0];
-        } else {
-          avatarPreview.src = fallbackAvatars[0];
-        }
+        avatarPreview.src = getFallbackAvatar(username || "guest");
       }
-    }
-
-    // Show modal to edit profile
-    function openProfileModal() {
-      usernameInput.value = username;
-      // Set gender radio
-      [...document.querySelectorAll('input[name="gender"]')].forEach(input => {
-        input.checked = (input.value === gender);
-      });
-      updateAvatarPreview();
       modalOverlay.style.display = "flex";
       usernameInput.focus();
     }
-    // Close profile modal
+
+    // Close modal
     function closeProfileModal() {
       modalOverlay.style.display = "none";
     }
 
-    // Validate profile inputs (basic)
-    function validateProfile() {
-      return username.trim().length >= 2;
-    }
-
-    // Convert file to base64
-    function fileToBase64(file) {
-      return new Promise((resolve, reject) => {
+    // Update avatar preview when user selects a file
+    avatarInput.addEventListener("change", () => {
+      const file = avatarInput.files[0];
+      if (file) {
         const reader = new FileReader();
-        reader.onload = e => resolve(e.target.result);
-        reader.onerror = e => reject(e);
-        reader.readAsDataURL(file);
-      });
-    }
-
-    // --- PRESENCE MANAGEMENT ---
-
-    // We'll keep track of connected users here
-    let connectedUsers = new Map(); // userId -> {username, gender, avatar, lastSeen}
-
-    // Add self presence in DB with TTL, remove on disconnect
-    async function setupPresence() {
-      userId = generateUserId();
-
-      const userPresenceRef = ref(db, `rooms/${roomId}/presence/${userId}`);
-
-      // Listen for presence of others
-      onValue(presenceRef, (snapshot) => {
-        const data = snapshot.val() || {};
-        connectedUsers.clear();
-        Object.entries(data).forEach(([id, info]) => {
-          connectedUsers.set(id, info);
-        });
-
-        // Update presence avatars on UI if needed
-
-        // Restrict users to 2 max
-        if (connectedUsers.size > 2) {
-          // If we are extra, kick self out
-          if (!connectedUsers.has(userId)) return;
-          alert("Chat room is full (2 users max). Please try again later.");
-          // Optionally disable input and send button
-          textInput.disabled = true;
-          sendBtn.disabled = true;
-          fileBtn.disabled = true;
-          emojiBtn.disabled = true;
-          return;
-        } else {
-          // Enable input if was disabled
-          textInput.disabled = false;
-          sendBtn.disabled = false;
-          fileBtn.disabled = false;
-          emojiBtn.disabled = false;
-        }
-      });
-
-      // Add self presence with metadata and a lastSeen timestamp to keep alive
-      async function updatePresence() {
-        const presenceData = {
-          username,
-          gender,
-          avatar,
-          lastSeen: Date.now()
+        reader.onload = e => {
+          avatarPreview.src = e.target.result;
+          avatar = e.target.result;
         };
-        await set(userPresenceRef, presenceData);
-      }
-
-      await updatePresence();
-
-      // Update presence every 15 seconds
-      setInterval(() => {
-        updatePresence();
-      }, 15000);
-
-      // Remove presence on disconnect
-      onDisconnect(userPresenceRef).remove();
-    }
-
-    // --- MESSAGE SENDING & RECEIVING ---
-
-    // Sanitize text (basic)
-    function escapeHTML(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    }
-
-    // Add message bubble to DOM
-    function addMessageToDOM(msg) {
-      if (!msg) return;
-      const {
-        id, username: senderName, gender: senderGender, text, timestamp, userId: senderId, avatar: senderAvatar, file, edited
-      } = msg;
-
-      const isYou = senderId === userId;
-
-      const messageDiv = document.createElement("div");
-      messageDiv.classList.add("message");
-      if (isYou) messageDiv.classList.add("you");
-
-      // Avatar image
-      const avatarImg = document.createElement("img");
-      avatarImg.classList.add("avatar");
-      avatarImg.src = senderAvatar || getFallbackAvatar(senderName);
-      avatarImg.alt = senderName + " avatar";
-      avatarImg.setAttribute("aria-hidden", "true");
-      if (connectedUsers.has(senderId)) {
-        avatarImg.classList.add("presence-online");
-      }
-
-      // Message content container
-      const contentDiv = document.createElement("div");
-      contentDiv.classList.add("message-content");
-
-      // Sender name label
-      const senderLabel = document.createElement("div");
-      senderLabel.classList.add("sender");
-      senderLabel.textContent = senderName;
-
-      // Bubble
-      const bubble = document.createElement("div");
-      bubble.classList.add("bubble");
-      bubble.innerHTML = "";
-
-      // If message contains a file
-      if (file) {
-        if (file.type.startsWith("image/")) {
-          const img = document.createElement("img");
-          img.src = file.url;
-          img.alt = file.name || "Image";
-          img.style.maxWidth = "200px";
-          img.style.borderRadius = "12px";
-          bubble.appendChild(img);
-          if (text) {
-            const textDiv = document.createElement("div");
-            textDiv.textContent = text;
-            bubble.appendChild(textDiv);
-          }
-        } else {
-          const link = document.createElement("a");
-          link.href = file.url;
-          link.target = "_blank";
-          link.rel = "noopener";
-          link.textContent = file.name || "Download file";
-          bubble.appendChild(link);
-          if (text) {
-            const textDiv = document.createElement("div");
-            textDiv.textContent = text;
-            bubble.appendChild(textDiv);
-          }
-        }
-      } else {
-        // Just text
-        bubble.textContent = text;
-      }
-
-      // Edited label
-      if (edited) {
-        const editedSpan = document.createElement("span");
-        editedSpan.style.fontSize = "0.7rem";
-        editedSpan.style.opacity = "0.7";
-        editedSpan.textContent = " (edited)";
-        bubble.appendChild(editedSpan);
-      }
-
-      // Info row: timestamp + actions (edit/delete)
-      const infoDiv = document.createElement("div");
-      infoDiv.classList.add("info");
-
-      const timeSpan = document.createElement("span");
-      timeSpan.textContent = new Date(timestamp).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-      infoDiv.appendChild(timeSpan);
-
-      // Actions only for your own messages
-      if (isYou) {
-        const actionsSpan = document.createElement("span");
-        actionsSpan.classList.add("actions");
-
-        // Edit button
-        const editBtn = document.createElement("button");
-        editBtn.title = "Edit message";
-        editBtn.textContent = "✏️";
-        editBtn.addEventListener("click", () => startEditingMessage(id, text));
-        actionsSpan.appendChild(editBtn);
-
-        // Delete button
-        const deleteBtn = document.createElement("button");
-        deleteBtn.title = "Delete message";
-        deleteBtn.textContent = "🗑️";
-        deleteBtn.addEventListener("click", () => deleteMessage(id));
-        actionsSpan.appendChild(deleteBtn);
-
-        infoDiv.appendChild(actionsSpan);
-      }
-
-      contentDiv.appendChild(senderLabel);
-      contentDiv.appendChild(bubble);
-      contentDiv.appendChild(infoDiv);
-
-      messageDiv.appendChild(avatarImg);
-      messageDiv.appendChild(contentDiv);
-
-      messagesDiv.appendChild(messageDiv);
-      messagesDiv.scrollTop = messagesDiv.scrollHeight;
-    }
-
-    // Get fallback avatar by hashing username
-    function getFallbackAvatar(name) {
-      if (!name) return fallbackAvatars[0];
-      const seed = hashString(name);
-      const shuffled = shuffleArrayWithSeed([...fallbackAvatars], seed);
-      return shuffled[0];
-    }
-
-    // --- MESSAGE CRUD ---
-
-    // Send a new message
-    async function sendMessage(text, file = null) {
-      if (!text.trim() && !file) return;
-
-      // Prepare message object
-      const msgObj = {
-        userId,
-        username,
-        gender,
-        avatar,
-        text: text.trim(),
-        timestamp: Date.now(),
-        edited: false
-      };
-      if (file) {
-        msgObj.file = file;
-      }
-
-      // Push to database
-      await push(messagesRef, msgObj);
-      textInput.value = "";
-      typingRef.child(userId).remove(); // clear typing status
-    }
-
-    // Edit message (set new text)
-    async function editMessage(id, newText) {
-      if (!id) return;
-      const msgRef = ref(db, `rooms/${roomId}/messages/${id}`);
-      await set(msgRef, {
-        ...messagesCache[id],
-        text: newText.trim(),
-        edited: true
-      });
-      editingMessageId = null;
-      textInput.value = "";
-    }
-
-    // Delete message
-    async function deleteMessage(id) {
-      if (!id) return;
-      const msgRef = ref(db, `rooms/${roomId}/messages/${id}`);
-      await remove(msgRef);
-    }
-
-    // --- TYPING INDICATOR ---
-
-    function updateTypingStatus(isTyping) {
-      if (isTyping) {
-        set(ref(db, `rooms/${roomId}/typing/${userId}`), username);
-        resetTypingTimeout();
-      } else {
-        remove(ref(db, `rooms/${roomId}/typing/${userId}`));
-      }
-    }
-
-    function resetTypingTimeout() {
-      if (typingTimeout) clearTimeout(typingTimeout);
-      typingTimeout = setTimeout(() => {
-        remove(ref(db, `rooms/${roomId}/typing/${userId}`));
-      }, 3000);
-    }
-
-    // --- EMOJI PICKER ---
-
-    const emojis = [
-      "😀","😁","😂","🤣","😃","😄","😅","😆","😉","😊","😋","😎","😍",
-      "😘","😗","😙","😚","🙂","🤗","🤩","🤔","😐","😑","😶","🙄","😏",
-      "😣","😥","😮","🤐","😯","😪","😫","😴","😌","😛","😜","😝","🤤",
-      "😒","😓","😔","😕","🙃","🤑","😲","☹️","🙁","😖","😞","😟","😤",
-      "😢","😭","😦","😧","😨","😩","🤯","😬","😰","😱","🥵","🥶","😳",
-      "🤪","😵","😡","😠","🤬","😷","🤒","🤕","🤢","🤮","🤧","😇","🤠",
-      "🤡","🤥","🤫","🤭","🧐","🤓","😈","👿","👹","👺","💀","👻","👽",
-      "🤖","💩","😺","😸","😹","😻","😼","😽","🙀","😿","😾"
-    ];
-
-    // Populate emoji picker
-    function setupEmojiPicker() {
-      emojis.forEach(e => {
-        const span = document.createElement("span");
-        span.textContent = e;
-        span.setAttribute("role", "option");
-        span.addEventListener("click", () => {
-          insertAtCursor(textInput, e);
-          emojiPicker.style.display = "none";
-          textInput.focus();
-          updateTypingStatus(true);
-        });
-        emojiPicker.appendChild(span);
-      });
-    }
-
-    function insertAtCursor(input, text) {
-      const start = input.selectionStart;
-      const end = input.selectionEnd;
-      const value = input.value;
-      input.value = value.substring(0, start) + text + value.substring(end);
-      input.selectionStart = input.selectionEnd = start + text.length;
-    }
-
-    // --- MESSAGE EDITING ---
-
-    let editingMessageId = null;
-
-    function startEditingMessage(id, currentText) {
-      editingMessageId = id;
-      textInput.value = currentText;
-      textInput.focus();
-    }
-
-    // --- LOAD & LISTEN MESSAGES ---
-
-    // Cache messages locally (id -> message)
-    const messagesCache = {};
-
-    // Listen for new/changed/deleted messages
-    onChildAdded(messagesRef, (data) => {
-      const id = data.key;
-      const msg = data.val();
-      messagesCache[id] = {...msg, id};
-      addMessageToDOM(messagesCache[id]);
-    });
-    onChildChanged(messagesRef, (data) => {
-      const id = data.key;
-      const msg = data.val();
-      messagesCache[id] = {...msg, id};
-      // Re-render entire messagesDiv for simplicity
-      renderMessages();
-    });
-    onChildRemoved(messagesRef, (data) => {
-      const id = data.key;
-      delete messagesCache[id];
-      renderMessages();
-    });
-
-    // Render all messages
-    function renderMessages() {
-      messagesDiv.innerHTML = "";
-      Object.values(messagesCache)
-        .sort((a,b) => a.timestamp - b.timestamp)
-        .forEach(addMessageToDOM);
-    }
-
-    // --- FILE UPLOAD ---
-
-    fileBtn.addEventListener("click", () => {
-      fileInput.click();
-    });
-
-    fileInput.addEventListener("change", async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      // Read file as base64 for demo (small files only)
-      if (file.size > 5*1024*1024) {
-        alert("File size must be less than 5MB.");
-        return;
-      }
-
-      const base64 = await fileToBase64(file);
-
-      // Save message with file info
-      await sendMessage("", {
-        url: base64,
-        name: file.name,
-        type: file.type
-      });
-      fileInput.value = "";
-    });
-
-    // --- SEND BUTTON & ENTER KEY ---
-
-    sendBtn.addEventListener("click", () => {
-      if (editingMessageId) {
-        editMessage(editingMessageId, textInput.value);
-      } else {
-        sendMessage(textInput.value);
+        reader.readAsDataURL(file);
       }
     });
-
-    textInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        if (editingMessageId) {
-          editMessage(editingMessageId, textInput.value);
-        } else {
-          sendMessage(textInput.value);
-        }
-      }
-      updateTypingStatus(true);
-    });
-
-    textInput.addEventListener("input", () => {
-      updateTypingStatus(true);
-    });
-
-    // --- EMOJI BUTTON ---
-
-    emojiBtn.addEventListener("click", () => {
-      emojiPicker.style.display = emojiPicker.style.display === "flex" ? "none" : "flex";
-    });
-
-    // --- TYPING INDICATOR LISTENER ---
-
-    onValue(typingRef, (snapshot) => {
-      const typingUsers = snapshot.val() || {};
-      // Remove self
-      delete typingUsers[userId];
-      const names = Object.values(typingUsers);
-      if (names.length === 1) {
-        typingIndicator.textContent = `${names[0]} is typing…`;
-      } else if (names.length > 1) {
-        typingIndicator.textContent = "Multiple users are typing…";
-      } else {
-        typingIndicator.textContent = "";
-      }
-    });
-
-    // --- NIGHT MODE TOGGLE ---
-
-    nightModeBtn.addEventListener("click", () => {
-      document.body.classList.toggle("night");
-    });
-
-    // --- PROFILE MODAL ---
-
-    changeUserBtn.addEventListener("click", openProfileModal);
-    modalOverlay.addEventListener("click", (e) => {
-      if (e.target === modalOverlay) closeProfileModal();
-    });
-    saveProfileBtn.addEventListener("click", () => {
-      const newName = usernameInput.value.trim();
-      if (newName.length < 2) {
-        alert("Name must be at least 2 characters.");
-        usernameInput.focus();
-        return;
-      }
-      username = newName;
-      gender = document.querySelector('input[name="gender"]:checked').value;
-      // avatar already updated on upload or preview click
-      saveProfileToStorage();
-      closeProfileModal();
-      setupPresence(); // Update presence with new profile info
-    });
-
-    // --- AVATAR UPLOAD ---
-
+    // Clicking avatar preview opens avatarInput
     avatarPreview.addEventListener("click", () => avatarInput.click());
     avatarPreview.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") {
@@ -984,41 +530,284 @@
         avatarInput.click();
       }
     });
-    avatarInput.addEventListener("change", async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      if (!file.type.startsWith("image/")) {
-        alert("Please upload an image file.");
+
+    // Save profile button click
+    saveProfileBtn.addEventListener("click", () => {
+      const newName = usernameInput.value.trim();
+      if (!newName) {
+        alert("Please enter a valid name.");
+        usernameInput.focus();
         return;
       }
-      if (file.size > 2*1024*1024) {
-        alert("Avatar image size must be less than 2MB.");
-        return;
+      username = newName;
+      // Get selected gender
+      const selectedGenderRadio = modalOverlay.querySelector('input[name="gender"]:checked');
+      gender = selectedGenderRadio ? selectedGenderRadio.value : "male";
+
+      // If no avatar selected, assign fallback avatar
+      if (!avatar) {
+        avatar = getFallbackAvatar(username);
       }
-      try {
-        const base64 = await fileToBase64(file);
-        avatar = base64;
-        updateAvatarPreview();
-      } catch (err) {
-        alert("Failed to load image.");
+      saveProfileToStorage();
+      closeProfileModal();
+
+      presenceSetOnline();
+      loadMessages();
+    });
+
+    // Initialize user profile from storage or show modal
+    function initUserProfile() {
+      loadProfileFromStorage();
+      if (!username) {
+        showProfileModal();
+      } else {
+        // If avatar empty, assign fallback
+        if (!avatar) {
+          avatar = getFallbackAvatar(username);
+          saveProfileToStorage();
+        }
+        presenceSetOnline();
+        loadMessages();
+      }
+    }
+
+    // Clear chat messages container
+    function clearMessages() {
+      messagesDiv.innerHTML = "";
+    }
+
+    // Add a message element to chat window
+    function addMessage(msg) {
+      const { id, senderId, senderName, senderGender, senderAvatar, text, timestamp } = msg;
+
+      // Don't add empty messages
+      if (!text) return;
+
+      // Determine if this message is sent by me
+      const isMine = senderId === userId;
+
+      // Create message container
+      const messageDiv = document.createElement("div");
+      messageDiv.className = "message " + (isMine ? "you" : "");
+
+      // Avatar image
+      const avatarImg = document.createElement("img");
+      avatarImg.className = "avatar presence-online";
+      avatarImg.alt = senderName + " avatar";
+      avatarImg.src = senderAvatar || getFallbackAvatar(senderName);
+
+      // Message content container
+      const contentDiv = document.createElement("div");
+      contentDiv.className = "message-content";
+
+      // Sender name
+      const senderDiv = document.createElement("div");
+      senderDiv.className = "sender";
+      senderDiv.textContent = senderName;
+
+      // Bubble with message text
+      const bubbleDiv = document.createElement("div");
+      bubbleDiv.className = "bubble";
+      bubbleDiv.textContent = text;
+
+      // Append all
+      contentDiv.appendChild(senderDiv);
+      contentDiv.appendChild(bubbleDiv);
+
+      if (isMine) {
+        messageDiv.appendChild(contentDiv);
+        messageDiv.appendChild(avatarImg);
+      } else {
+        messageDiv.appendChild(avatarImg);
+        messageDiv.appendChild(contentDiv);
+      }
+
+      messagesDiv.appendChild(messageDiv);
+      // Scroll to bottom
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    // Load existing messages from Firebase and listen for new ones
+    function loadMessages() {
+      clearMessages();
+      onChildAdded(messagesRef, snapshot => {
+        const msg = snapshot.val();
+        addMessage({ id: snapshot.key, ...msg });
+      });
+    }
+
+    // Send message to Firebase
+    function sendMessage(text) {
+      if (!text.trim()) return;
+      const msgObj = {
+        senderId: userId,
+        senderName: username,
+        senderGender: gender,
+        senderAvatar: avatar,
+        text: text.trim(),
+        timestamp: Date.now()
+      };
+      push(messagesRef, msgObj);
+      textInput.value = "";
+      setTyping(false);
+    }
+
+    // Typing indicator logic
+    function setTyping(isTyping) {
+      if (isTyping) {
+        set(ref(db, `rooms/${roomId}/typing/${userId}`), {
+          username,
+          gender,
+          avatar
+        });
+        if (typingTimeout) clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(() => {
+          setTyping(false);
+        }, 3000);
+      } else {
+        remove(ref(db, `rooms/${roomId}/typing/${userId}`));
+        if (typingTimeout) clearTimeout(typingTimeout);
+        typingTimeout = null;
+      }
+    }
+
+    // Show typing users except me
+    function setupTypingIndicator() {
+      onValue(typingRef, snapshot => {
+        const typingUsers = snapshot.val() || {};
+        const othersTyping = Object.entries(typingUsers).filter(([id]) => id !== userId);
+        if (othersTyping.length === 0) {
+          typingIndicator.textContent = "";
+        } else if (othersTyping.length === 1) {
+          typingIndicator.textContent = `${othersTyping[0][1].username} is typing...`;
+        } else {
+          typingIndicator.textContent = `Several people are typing...`;
+        }
+      });
+    }
+
+    // Presence (online users) logic
+    function presenceSetOnline() {
+      if (!userId) return;
+      const userPresenceRef = ref(db, `rooms/${roomId}/presence/${userId}`);
+
+      set(userPresenceRef, {
+        username,
+        gender,
+        avatar,
+        lastActive: Date.now()
+      });
+
+      onDisconnect(userPresenceRef).remove();
+
+      // Update lastActive periodically
+      setInterval(() => {
+        set(userPresenceRef, {
+          username,
+          gender,
+          avatar,
+          lastActive: Date.now()
+        });
+      }, 30000);
+    }
+
+    // Presence display can be implemented if you want to show online users
+
+    // Event listeners
+
+    sendBtn.addEventListener("click", () => {
+      sendMessage(textInput.value);
+    });
+
+    textInput.addEventListener("keydown", e => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        sendMessage(textInput.value);
+      } else {
+        setTyping(true);
       }
     });
 
-    // --- ON PAGE LOAD ---
+    textInput.addEventListener("input", () => {
+      if (textInput.value.length > 0) {
+        setTyping(true);
+      } else {
+        setTyping(false);
+      }
+    });
 
-    // Load user profile from sessionStorage or open modal
-    loadProfileFromStorage();
-    if (!username) {
-      openProfileModal();
-    } else {
-      updateAvatarPreview();
+    emojiBtn.addEventListener("click", () => {
+      if (emojiPicker.style.display === "flex") {
+        emojiPicker.style.display = "none";
+      } else {
+        emojiPicker.style.display = "flex";
+      }
+    });
+
+    // Populate emoji picker
+    const emojis = ["😀","😁","😂","🤣","😃","😄","😅","😆","😉","😊","😋","😎","😍","😘","😗","😙","😚","🙂","🤗","🤩","🤔","🤨","😐","😑","😶","🙄","😏","😣","😥","😮","🤐","😯","😪","😫","😴","😌","😛","😜","😝","🤤","😒","😓","😔","😕","🙃","🤑","😲","☹️","🙁","😖","😞","😟","😤","😢","😭","😦","😧","😨","😩","🤯","😬","😰","😱","🥵","🥶","😳","🤪","😵","😡","😠","🤬","😷","🤒","🤕","🤢","🤮","🤧","😇"];
+    emojis.forEach(e => {
+      const span = document.createElement("span");
+      span.textContent = e;
+      span.tabIndex = 0;
+      span.setAttribute("role", "option");
+      span.addEventListener("click", () => {
+        textInput.value += e;
+        textInput.focus();
+        emojiPicker.style.display = "none";
+        setTyping(true);
+      });
+      span.addEventListener("keydown", evt => {
+        if(evt.key === "Enter" || evt.key === " ") {
+          evt.preventDefault();
+          span.click();
+        }
+      });
+      emojiPicker.appendChild(span);
+    });
+
+    fileBtn.addEventListener("click", () => {
+      fileInput.click();
+    });
+
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+
+      // Only image files handled here for simplicity
+      if (!file.type.startsWith("image/")) {
+        alert("Only image files supported for now.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = e => {
+        sendMessage(`[Image]: ${e.target.result}`);
+      };
+      reader.readAsDataURL(file);
+
+      fileInput.value = "";
+    });
+
+    nightModeBtn.addEventListener("click", () => {
+      document.body.classList.toggle("night");
+    });
+
+    changeUserBtn.addEventListener("click", () => {
+      showProfileModal();
+    });
+
+    // Initialize
+    function init() {
+      userId = sessionStorage.getItem("quickchat_userId");
+      if (!userId) {
+        userId = generateUserId();
+        sessionStorage.setItem("quickchat_userId", userId);
+      }
+      initUserProfile();
+      setupTypingIndicator();
     }
 
-    // Setup emoji picker
-    setupEmojiPicker();
-
-    // Setup presence and Firebase listeners after profile ready
-    setupPresence();
+    init();
 
   </script>
 </body>
